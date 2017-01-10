@@ -4,8 +4,9 @@
 int pwm = 5;
 int setpoint = 310;
 int temp;
-int ti = 1.5;
-int gain = 6;
+int ti = 1;
+int gain = 4;
+int holderPin = 7;
 long lastTime = millis();
 long timeFactor;
 int percentage;
@@ -20,6 +21,8 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 void setup()
 {
+  pinMode(holderPin, INPUT_PULLUP);
+
   // initialize the LCD
   lcd.begin();
   Serial.begin(9600);
@@ -30,6 +33,7 @@ void setup()
   lcd.print("Soldering System");
   delay(2000);
   setPwmFrequency(6, 2);
+  myEnc.write(300 * 2);
 }
 
 void loop()
@@ -38,19 +42,29 @@ void loop()
   temp = getTemperature();
   updateDisplay();
   if (tipConnected()) {
-    pwm = calculatePWM();
-    updateDisplay();
-  } else { analogWrite(6, 0); }
+    if (digitalRead(holderPin) == HIGH) {
+      setpoint = getSetpoint();
+      pwm = calculatePWM();
+      updateDisplay();
+    } else {
+      setpoint = 0;
+      pwm = 0;
+      updateDisplay();
+    }
+  } else {
+    analogWrite(6, 0);
+  }
 }
 
 int getTemperature()
 {
   analogWrite(6, 0);    //switch off heater
-  delay(40);     //wait for some time (to get low pass filter in steady state)
+  delay(50);     //wait for some time (to get low pass filter in steady state)
   int adcValue = analogRead(A0); // read the input on analog pin 7:
+  Serial.println(adcValue);
   analogWrite(6, pwm); //switch heater back to last value
-  //return adcValue;
-  return round(((float) adcValue) * 0.415 + 25.0); //apply linear conversion to actual temperature
+  //return adcValue;timeFactor
+  return round((((float) adcValue) - 60) * 0.74); //apply linear conversion to actual temperature
 }
 int getSetpoint()
 {
@@ -65,7 +79,9 @@ int getSetpoint()
 bool tipConnected() {
   if (temp > 440) {
     return false;
-  } else { return true; }
+  } else {
+    return true;
+  }
 }
 int calculatePWM() {
   timeFactor = (millis() - lastTime) / 1000 * ti;
@@ -105,34 +121,43 @@ void setPwmFrequency(int pin, int divisor) {
   }
 }
 void updateDisplay() {
-  if (tipConnected()) {
-    if (displayInitialized == 0)
-    {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Huidig: ");
-      lcd.setCursor(0, 1);
-      lcd.print("Instelling: ");
-      displayInitialized = 1;
-      warningInialized = 0;
+  if (digitalRead(holderPin) == HIGH) {
+
+    if (tipConnected()) {
+      if (displayInitialized == 0)
+      {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Huidig: ");
+        lcd.setCursor(0, 1);
+        lcd.print("Instelling: ");
+        displayInitialized = 1;
+        warningInialized = 0;
+      }
+      lcd.setCursor(12, 0);
+      lcd.print(temp);
+      lcd.print(" ");
+      lcd.setCursor(12, 1);
+      lcd.print(setpoint);
+      lcd.print(" ");
+    } else {
+      if (warningInialized == 0)
+      {
+        displayInitialized = 0;
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Geen soldeertip");
+        lcd.setCursor(0, 1);
+        lcd.print("aangesloten...");
+        warningInialized = 1;
+      }
     }
-    lcd.setCursor(12, 0);
-    lcd.print(temp);
-    lcd.print(" ");
-    lcd.setCursor(12, 1);
-    lcd.print(setpoint);
-    lcd.print(" ");
   } else {
-    if (warningInialized == 0)
-    {
-      displayInitialized = 0;
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Geen soldeertip");
-      lcd.setCursor(0, 1);
-      lcd.print("aangesloten...");
-      warningInialized = 1;
-    }
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Standby...");
+    displayInitialized = 0;
+    warningInialized = 0;
   }
 }
 

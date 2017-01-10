@@ -1,2 +1,2 @@
-# wmpr
-Weller WMPR controller
+# hello-world
+Just another repository
